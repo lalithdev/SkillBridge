@@ -1,0 +1,3769 @@
+openapi: 3.0.3
+info:
+  title: SkillBridge REST API
+  description: |
+    Official OpenAPI 3.0.3 specification for SkillBridge — Academia–Industry Skill Intelligence & Career Collaboration Platform (SIH26044).
+    Derived strictly from approved PRD, SRS, Technical Architecture, and Database Design documents.
+
+    ### Note on Architectural Separation of Concerns:
+    In this OpenAPI 3.0 specification, the `BearerAuth` security scheme represents HTTP transport-level **authentication** (verifying a valid, signed, unexpired JWT token).
+    Specific **role permissions** (`STUDENT`, `COMPANY`, `COLLEGE`, `ADMIN`), **resource ownership rules** (e.g. company opportunity editing), and **institutional data scoping** (e.g. college analytics derived from token context) are enforced server-side by Spring Security URL security (`SecurityConfig`) and method security (`@PreAuthorize` + `SecurityService`).
+  version: 1.0.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  contact:
+    name: SkillBridge Engineering Team
+servers:
+  - url: /api/v1
+    description: Production & Local API Gateway Base Path
+
+tags:
+  - name: Authentication
+    description: User registration, login, session inspection, and token handling
+  - name: Students
+    description: Student profile, current skills, portfolio items, and resume management
+  - name: Companies
+    description: Company profile and organization management
+  - name: Colleges
+    description: College profile, student roster, and placement oversight
+  - name: Admin
+    description: Platform administration, user moderation, and organization verification
+  - name: Skills Taxonomy
+    description: Master skills catalog management
+  - name: Departments Taxonomy
+    description: Standardized academic engineering branches and departments catalog
+  - name: Opportunities
+    description: Internship and placement opportunity postings and discovery
+  - name: Applications
+    description: Student applications and company recruitment pipeline progression
+  - name: Internships & Placements
+    description: Confirmed internship and placement outcome tracking
+  - name: Feedback
+    description: Company post-internship feedback collection and viewing
+  - name: Matching
+    description: Skill coverage calculation, eligibility evaluation, and recommendations
+  - name: Analytics
+    description: College skill availability, industry demand, skill gap analysis, and recruitment funnel
+
+paths:
+  # ============================================================================
+  # 1. AUTHENTICATION APIS
+  # ============================================================================
+  /auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user account
+      description: |
+        Registers a new account under exactly one role (`STUDENT`, `COMPANY`, or `COLLEGE`).
+        Creates the base `users` record and initializes the corresponding role profile.
+        **Note:** Admin accounts cannot be self-registered via this public endpoint.
+        (FR-AUTH-01)
+      operationId: registerUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User authentication
+      description: |
+        Validates user credentials and returns a signed stateless JWT token with role claims.
+        (FR-AUTH-02)
+      operationId: loginUser
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Successfully authenticated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          description: Invalid email or password, or account deactivated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get current authenticated user context
+      description: |
+        Returns identity, role, and profile identifiers extracted from token context.
+        **Role(s):** Any authenticated user (`STUDENT`, `COMPANY`, `COLLEGE`, `ADMIN`).
+      operationId: getCurrentUser
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Current user context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: User logout
+      description: |
+        Stateless JWT logout acknowledgement.
+        **Note:** Because JWT is stateless and no server-side blacklist is maintained,
+        the server acknowledges the request while the client must discard the token
+        from client-side memory/sessionStorage. (FR-AUTH-03)
+        **Role(s):** Any authenticated user.
+      operationId: logoutUser
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Logged out successfully (token discarded on client)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ============================================================================
+  # 2. STUDENT APIS
+  # ============================================================================
+  /students/profile:
+    get:
+      tags:
+        - Students
+      summary: Get student profile
+      description: |
+        Returns the authenticated student's personal, academic, and portfolio details.
+        **Role(s):** `STUDENT` (own profile only). (FR-STU-01)
+      operationId: getStudentProfile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Student profile retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Students
+      summary: Update student profile
+      description: |
+        Updates academic details, department, CGPA, career interests, and portfolio URLs.
+        **Role(s):** `STUDENT` (own profile only). (FR-STU-01)
+      operationId: updateStudentProfile
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStudentProfileRequest'
+      responses:
+        '200':
+          description: Student profile updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentProfileResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /students/{id}/profile:
+    get:
+      tags:
+        - Students
+      summary: View specific student profile
+      description: |
+        Permits reviewing companies (if student applied to company's opportunity),
+        the student's affiliated college, or Admin to inspect profile details.
+        **Role(s):** `COLLEGE` (affiliated student), `COMPANY` (applied candidate), `ADMIN`.
+        (FR-COL-01, FR-APP-03)
+      operationId: getStudentProfileById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Student profile ID
+      responses:
+        '200':
+          description: Profile retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StudentProfileResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /students/profile/skills:
+    get:
+      tags:
+        - Students
+      summary: List student's current skills
+      description: |
+        Returns the active skill list of the authenticated student.
+        **Role(s):** `STUDENT` (own profile). (FR-STU-02)
+      operationId: getStudentSkills
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Skills list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SkillDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags:
+        - Students
+      summary: Add skill to student profile
+      description: |
+        Adds a skill from master taxonomy to student profile. Rejects duplicates.
+        **Role(s):** `STUDENT` (own profile). (FR-STU-02)
+      operationId: addStudentSkill
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddStudentSkillRequest'
+      responses:
+        '201':
+          description: Skill added successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillDto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Skill already present on profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /students/profile/skills/{skillId}:
+    delete:
+      tags:
+        - Students
+      summary: Remove skill from student profile
+      description: |
+        Removes an existing skill from the student profile.
+        **Role(s):** `STUDENT` (own profile). (FR-STU-02)
+      operationId: removeStudentSkill
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: skillId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Skill removed successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /students/profile/projects:
+    get:
+      tags:
+        - Students
+      summary: List student portfolio projects
+      description: |
+        Returns all portfolio projects for authenticated student.
+        **Role(s):** `STUDENT` (own profile). (FR-STU-03)
+      operationId: getStudentProjects
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Projects list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags:
+        - Students
+      summary: Add project to portfolio
+      description: |
+        Creates a new portfolio project entry.
+        **Role(s):** `STUDENT` (own profile). (FR-STU-03)
+      operationId: createStudentProject
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectRequest'
+      responses:
+        '201':
+          description: Project created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectDto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /students/profile/projects/{projectId}:
+    put:
+      tags:
+        - Students
+      summary: Update portfolio project
+      description: |
+        Updates an existing portfolio project.
+        **Role(s):** `STUDENT` (own project). (FR-STU-03)
+      operationId: updateStudentProject
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectRequest'
+      responses:
+        '200':
+          description: Project updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectDto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Students
+      summary: Delete portfolio project
+      description: |
+        Removes a project from portfolio.
+        **Role(s):** `STUDENT` (own project). (FR-STU-03)
+      operationId: deleteStudentProject
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Project deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /students/profile/certifications:
+    get:
+      tags:
+        - Students
+      summary: List student certifications
+      description: |
+        Returns all certifications for authenticated student.
+        **Role(s):** `STUDENT` (own profile). (FR-STU-03)
+      operationId: getStudentCertifications
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Certifications list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CertificationDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags:
+        - Students
+      summary: Add certification
+      description: |
+        Adds a certification to the student profile.
+        **Role(s):** `STUDENT` (own profile). (FR-STU-03)
+      operationId: createStudentCertification
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CertificationRequest'
+      responses:
+        '201':
+          description: Certification added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificationDto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /students/profile/certifications/{certificationId}:
+    put:
+      tags:
+        - Students
+      summary: Update certification
+      description: |
+        Updates certification entry.
+        **Role(s):** `STUDENT` (own certification). (FR-STU-03)
+      operationId: updateStudentCertification
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: certificationId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CertificationRequest'
+      responses:
+        '200':
+          description: Certification updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CertificationDto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Students
+      summary: Delete certification
+      description: |
+        Deletes certification entry.
+        **Role(s):** `STUDENT` (own certification). (FR-STU-03)
+      operationId: deleteStudentCertification
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: certificationId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Certification deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /students/profile/resume:
+    post:
+      tags:
+        - Students
+      summary: Upload student resume
+      description: |
+        Uploads a resume file (PDF or DOCX, max 5 MB). Stored securely on filesystem;
+        path saved to `student_profiles.resume_path`.
+        **Role(s):** `STUDENT` (own profile). (FR-STU-04 / S1, OD-08)
+      operationId: uploadResume
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Resume document (PDF or DOCX only, max 5MB)
+      responses:
+        '200':
+          description: Resume uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResumeUploadResponse'
+        '400':
+          description: Invalid file payload or missing file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '413':
+          description: Resume file exceeds 5 MB limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '415':
+          description: Unsupported file format (only PDF and DOCX permitted)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags:
+        - Students
+      summary: Remove student resume
+      description: |
+        Deletes existing resume file.
+        **Role(s):** `STUDENT` (own profile). (FR-STU-04 / S1)
+      operationId: deleteResume
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Resume removed successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /students/{studentId}/resume:
+    get:
+      tags:
+        - Students
+      summary: Download student resume
+      description: |
+        Streams resume binary.
+        **Role(s):** `STUDENT` (own resume), `COMPANY` (applied candidate review), `ADMIN`.
+        (FR-STU-04)
+      operationId: downloadResume
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: studentId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Resume file stream
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================================
+  # 3. COMPANY APIS
+  # ============================================================================
+  /companies/profile:
+    get:
+      tags:
+        - Companies
+      summary: Get company profile
+      description: |
+        Returns company profile for authenticated company user.
+        **Role(s):** `COMPANY` (own profile). (FR-COM-01)
+      operationId: getCompanyProfile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Company profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanyProfileDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    put:
+      tags:
+        - Companies
+      summary: Update company profile
+      description: |
+        Updates company details and contact information.
+        **Role(s):** `COMPANY` (own profile). (FR-COM-01)
+      operationId: updateCompanyProfile
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCompanyProfileRequest'
+      responses:
+        '200':
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanyProfileDto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /companies/{id}:
+    get:
+      tags:
+        - Companies
+      summary: View public company profile
+      description: |
+        Returns company profile including public verification status.
+        **Role(s):** Any authenticated user. (FR-COM-01, FR-COM-02)
+      operationId: getCompanyById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Company profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompanyProfileDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================================
+  # 4. COLLEGE APIS
+  # ============================================================================
+  /colleges/profile:
+    get:
+      tags:
+        - Colleges
+      summary: Get college profile
+      description: |
+        Returns profile for authenticated college.
+        **Role(s):** `COLLEGE` (own profile). (FR-COL-01)
+      operationId: getCollegeProfile
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: College profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollegeProfileDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    put:
+      tags:
+        - Colleges
+      summary: Update college profile
+      description: |
+        Updates college contact info and campus address.
+        **Role(s):** `COLLEGE` (own profile). (FR-COL-01)
+      operationId: updateCollegeProfile
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCollegeProfileRequest'
+      responses:
+        '200':
+          description: College profile updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CollegeProfileDto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /colleges/students:
+    get:
+      tags:
+        - Colleges
+      summary: List college students roster
+      description: |
+        Returns paginated roster of students enrolled in the college.
+        **Data Scoping:** Automatically scoped to the caller's `collegeId` extracted from JWT.
+        (ADMIN can optionally pass `collegeId` query parameter).
+        Supports filtering by department, year of study, and search.
+        **Role(s):** `COLLEGE` (own students only), `ADMIN`. (FR-COL-01)
+      operationId: getCollegeStudents
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: collegeId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Admin-only override to view a specific college's roster
+        - name: departmentId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+        - name: yearOfStudy
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Paginated student list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageStudentSummaryResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /colleges/departments:
+    get:
+      tags:
+        - Colleges
+      summary: College department breakdown
+      description: |
+        Returns student enrollment counts per department for this college.
+        **Data Scoping:** Automatically scoped to caller's `collegeId` from JWT claim.
+        **Role(s):** `COLLEGE` (own college), `ADMIN`. (FR-COL-01, DBQ-01)
+      operationId: getCollegeDepartmentBreakdown
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: collegeId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Admin-only override
+      responses:
+        '200':
+          description: Department student counts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CollegeDepartmentSummaryDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ============================================================================
+  # 5. ADMIN APIS
+  # ============================================================================
+  /admin/users:
+    get:
+      tags:
+        - Admin
+      summary: List all user accounts
+      description: |
+        Paginated platform user list filterable by role and active status.
+        **Role(s):** `ADMIN` only. (FR-ADM-01)
+      operationId: listUsersAdmin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: role
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UserRole'
+        - name: isActive
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Users list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageAdminUserResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/users/{id}/status:
+    patch:
+      tags:
+        - Admin
+      summary: Activate or deactivate user account
+      description: |
+        Toggles `is_active` status. Deactivated users cannot authenticate.
+        **Role(s):** `ADMIN` only. (FR-ADM-01)
+      operationId: updateUserStatusAdmin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - isActive
+              properties:
+                isActive:
+                  type: boolean
+      responses:
+        '200':
+          description: User status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/verifications:
+    get:
+      tags:
+        - Admin
+      summary: List pending organization verifications
+      description: |
+        Retrieves list of colleges and companies pending verification.
+        **Role(s):** `ADMIN` only. (FR-ADM-02, OD-06)
+      operationId: getPendingVerificationsAdmin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [COLLEGE, COMPANY]
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [PENDING, VERIFIED, REJECTED]
+      responses:
+        '200':
+          description: Verification queue
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/VerificationItemDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/verifications/{type}/{id}:
+    patch:
+      tags:
+        - Admin
+      summary: Approve or reject organization verification
+      description: |
+        Sets verification status to `VERIFIED` or `REJECTED`.
+        **Role(s):** `ADMIN` only. (FR-ADM-02, OD-06)
+      operationId: updateVerificationStatusAdmin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [COLLEGE, COMPANY]
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: College ID or Company ID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [VERIFIED, REJECTED]
+      responses:
+        '200':
+          description: Verification status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationItemDto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/opportunities/{id}/status:
+    patch:
+      tags:
+        - Admin
+      summary: Admin opportunity moderation
+      description: |
+        Moderates and closes inappropriate opportunity postings.
+        **Role(s):** `ADMIN` only. (FR-ADM-04)
+      operationId: moderateOpportunityAdmin
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  type: string
+                  enum: [CLOSED]
+      responses:
+        '200':
+          description: Opportunity moderated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpportunityDetailDto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================================
+  # 6. SKILL & DEPARTMENT TAXONOMY APIS
+  # ============================================================================
+  /skills:
+    get:
+      tags:
+        - Skills Taxonomy
+      summary: Search skills master taxonomy
+      description: |
+        Returns active skills matching search query or category.
+        **Role(s):** Any authenticated user. (FR-ADM-03, FR-STU-02, FR-INT-01)
+      operationId: listSkills
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: isActive
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Skills list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SkillDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Skills Taxonomy
+      summary: Add skill to taxonomy (Admin)
+      description: |
+        Adds a new canonical skill to the taxonomy.
+        **Role(s):** `ADMIN` only. (FR-ADM-03)
+      operationId: createSkill
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSkillRequest'
+      responses:
+        '201':
+          description: Skill created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillDto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Skill name already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /skills/{id}:
+    put:
+      tags:
+        - Skills Taxonomy
+      summary: Update master skill (Admin)
+      description: |
+        Renames or re-categorizes a skill in the master taxonomy.
+        **Role(s):** `ADMIN` only. (FR-ADM-03)
+      operationId: updateSkill
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSkillRequest'
+      responses:
+        '200':
+          description: Skill updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillDto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Skills Taxonomy
+      summary: Soft-deactivate skill (Admin)
+      description: |
+        Sets `is_active = false`. Existing references are preserved.
+        **Role(s):** `ADMIN` only. (FR-ADM-03)
+      operationId: deleteSkill
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '204':
+          description: Skill deactivated
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /departments:
+    get:
+      tags:
+        - Departments Taxonomy
+      summary: List standardized academic departments
+      description: |
+        Returns active department master catalog for eligibility and profile selection.
+        **Role(s):** Any authenticated user. (DBQ-01)
+      operationId: listDepartments
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: isActive
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: Departments list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DepartmentDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Departments Taxonomy
+      summary: Create academic department (Admin)
+      description: |
+        Adds a new department to the master catalog.
+        **Role(s):** `ADMIN` only. (DBQ-01)
+      operationId: createDepartment
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDepartmentRequest'
+      responses:
+        '201':
+          description: Department created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentDto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Department name or code already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================================
+  # 7. OPPORTUNITY APIS
+  # ============================================================================
+  /opportunities:
+    get:
+      tags:
+        - Opportunities
+      summary: Search and browse open opportunities
+      description: |
+        Returns paginated list of open opportunities with filtering.
+        When invoked with a Student token, each item is automatically annotated with
+        the student's computed `matchPercent` and `isEligible` flags. (FR-INT-03, FR-MATCH-01, FR-MATCH-02)
+        **Role(s):** Any authenticated user.
+      operationId: searchOpportunities
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/OpportunityType'
+        - name: mode
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/OpportunityMode'
+        - name: departmentId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+        - name: minCgpa
+          in: query
+          required: false
+          schema:
+            type: number
+            format: float
+        - name: status
+          in: query
+          required: false
+          description: Filter by opportunity status (defaults to OPEN if omitted)
+          schema:
+            $ref: '#/components/schemas/OpportunityStatus'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            default: created_at,desc
+      responses:
+        '200':
+          description: Paginated opportunity listings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageOpportunityListItemResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Opportunities
+      summary: Post a new internship or placement opportunity
+      description: |
+        Creates an opportunity posting with required skills (minimum 1 required),
+        branch eligibility, and criteria.
+        **Creation State:** Newly posted opportunities are automatically created with `status: OPEN`.
+        **Verification Status Policy:** Any registered company profile may post. The company's
+        `verification_status` is displayed on the posting.
+        **Role(s):** `COMPANY` (own postings). (FR-INT-01)
+      operationId: createOpportunity
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOpportunityRequest'
+      responses:
+        '201':
+          description: Opportunity created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpportunityDetailDto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /opportunities/company/my:
+    get:
+      tags:
+        - Opportunities
+      summary: List company's own postings
+      description: |
+        Returns all postings created by the authenticated company.
+        **Role(s):** `COMPANY` (own postings). (FR-INT-01, FR-INT-02)
+      operationId: getCompanyOpportunities
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/OpportunityStatus'
+        - name: type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/OpportunityType'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Company opportunities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageOpportunityListItemResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /opportunities/{id}:
+    get:
+      tags:
+        - Opportunities
+      summary: Get opportunity details
+      description: |
+        Returns full details of an opportunity. For student sessions, provides
+        per-opportunity match breakdown (`matchedSkills`, `missingSkills`, `matchPercent`, `isEligible`).
+        **Role(s):** Any authenticated user. (FR-INT-03, FR-MATCH-01, FR-MATCH-02)
+      operationId: getOpportunityById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Detailed opportunity representation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpportunityDetailDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Opportunities
+      summary: Update opportunity posting
+      description: |
+        Updates opportunity details.
+        **Ownership:** Creator company only (`company_profile_id == auth.companyProfileId`).
+        **Role(s):** `COMPANY`. (FR-INT-02)
+      operationId: updateOpportunity
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOpportunityRequest'
+      responses:
+        '200':
+          description: Opportunity updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpportunityDetailDto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /opportunities/{id}/status:
+    patch:
+      tags:
+        - Opportunities
+      summary: Update opportunity publication status
+      description: |
+        Allows the posting company to update the opportunity publication status (close an active opportunity or reopen a closed opportunity).
+        **Ownership:** Creator company only.
+        **Role(s):** `COMPANY`. (FR-INT-02)
+      operationId: updateOpportunityStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  $ref: '#/components/schemas/OpportunityStatus'
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpportunityDetailDto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================================
+  # 8. APPLICATION APIS
+  # ============================================================================
+  /applications:
+    post:
+      tags:
+        - Applications
+      summary: Submit application
+      description: |
+        Student applies to an open opportunity. Validates eligibility and open status.
+        Snapshots `matchPercentAtApply`. Rejects duplicates with 409 Conflict.
+        **Role(s):** `STUDENT` (eligible students only). (FR-APP-01, FR-MATCH-02)
+      operationId: submitApplication
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitApplicationRequest'
+      responses:
+        '201':
+          description: Application submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationDto'
+        '400':
+          description: Opportunity closed, deadline passed, or student ineligible
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Duplicate application attempt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /applications/my:
+    get:
+      tags:
+        - Applications
+      summary: Student's submitted applications
+      description: |
+        Returns all applications submitted by authenticated student with recruitment pipeline status.
+        **Role(s):** `STUDENT` (own applications). (FR-APP-02)
+      operationId: getMyApplications
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ApplicationStatus'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: List of applications
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageStudentApplicationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /applications/{id}:
+    get:
+      tags:
+        - Applications
+      summary: Get application details
+      description: |
+        Returns application record.
+        **Access Control:** Accessible to applicant student, creator company, student's college, and Admin.
+        (FR-APP-02, FR-APP-04)
+      operationId: getApplicationById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Application details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationDetailDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /opportunities/{opportunityId}/applications:
+    get:
+      tags:
+        - Applications
+      summary: Company view candidates ranked by skill match
+      description: |
+        Returns applicants to the opportunity, filtered by eligibility and ordered
+        descending by `matchPercentAtApply`.
+        **Ownership:** Creator company only (`opportunities.company_profile_id == auth.companyProfileId`).
+        **Role(s):** `COMPANY`, `ADMIN`. (FR-APP-03)
+      operationId: getOpportunityApplications
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: opportunityId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/ApplicationStatus'
+        - name: eligibleOnly
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Ranked applicant list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageCompanyApplicantResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /applications/{id}/status:
+    patch:
+      tags:
+        - Applications
+      summary: Advance recruitment pipeline stage
+      description: |
+        Advances candidate stage (`APPLIED` → `UNDER_REVIEW` → `SHORTLISTED` → `INTERVIEW` → `SELECTED` | `REJECTED`).
+        When an application transitions to `SELECTED`, the system automatically creates an associated `internship_records` entity (with matching type and initial `UPCOMING` status) as a single atomic database transaction.
+        **Ownership:** Creator company only.
+        **Role(s):** `COMPANY`. (FR-APP-04, FR-APP-05, OD-03)
+      operationId: updateApplicationStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  $ref: '#/components/schemas/ApplicationStatus'
+      responses:
+        '200':
+          description: Stage updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationDto'
+        '400':
+          description: Invalid transition attempt (skipping or reversing)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================================
+  # 9. INTERNSHIP & PLACEMENT APIS
+  # ============================================================================
+  /internships/my:
+    get:
+      tags:
+        - Internships & Placements
+      summary: Student's confirmed internships / placements
+      description: |
+        Returns confirmed outcomes for authenticated student.
+        **Role(s):** `STUDENT` (own outcomes). (FR-INT-04)
+      operationId: getMyInternships
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Internships list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InternshipRecordDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /internships/company/my:
+    get:
+      tags:
+        - Internships & Placements
+      summary: Company's active interns & placements
+      description: |
+        Returns confirmed interns/placements hired by the authenticated company.
+        **Role(s):** `COMPANY` (own hires). (FR-INT-04)
+      operationId: getCompanyInternships
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/InternshipStatus'
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Company internships
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageInternshipRecordResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /internships/{id}:
+    get:
+      tags:
+        - Internships & Placements
+      summary: Get internship/placement record
+      description: |
+        Returns specific internship outcome and status.
+        **Access Control:** Accessible to intern student, employer company, student's college, and Admin.
+        (FR-INT-04, FR-INT-06)
+      operationId: getInternshipById
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Internship details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternshipRecordDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /internships/{id}/status:
+    patch:
+      tags:
+        - Internships & Placements
+      summary: Update internship progress lifecycle
+      description: |
+        Updates progress status through `UPCOMING` → `ONGOING` → `COMPLETED`.
+        **Ownership:** Employer company only.
+        **Role(s):** `COMPANY`. (FR-INT-04)
+      operationId: updateInternshipStatus
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - status
+              properties:
+                status:
+                  $ref: '#/components/schemas/InternshipStatus'
+                startDate:
+                  type: string
+                  format: date
+                endDate:
+                  type: string
+                  format: date
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternshipRecordDto'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================================================
+  # 10. FEEDBACK APIS
+  # ============================================================================
+  /internships/{internshipId}/feedback:
+    post:
+      tags:
+        - Feedback
+      summary: Submit company feedback
+      description: |
+        Company provides qualitative free-text feedback following internship completion.
+        **Precondition:** Requires `internship_records.status = 'COMPLETED'`.
+        **Ownership:** Employer company only.
+        **Role(s):** `COMPANY`. (FR-INT-05, OD-04, OD-11, DBQ-04)
+      operationId: submitCompanyFeedback
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: internshipId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitFeedbackRequest'
+      responses:
+        '201':
+          description: Feedback recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackDto'
+        '400':
+          description: Internship record not yet completed or validation failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          description: Feedback already submitted for this record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      tags:
+        - Feedback
+      summary: View feedback for an internship
+      description: |
+        Visible to intern student, employer company, and affiliated college placement cell.
+        **Role(s):** `STUDENT`, `COMPANY`, `COLLEGE`, `ADMIN`. (FR-INT-05, OD-04)
+      operationId: getInternshipFeedback
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: internshipId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Feedback details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /colleges/feedback:
+    get:
+      tags:
+        - Feedback
+      summary: College aggregated company feedback
+      description: |
+        Returns qualitative feedback entries across all students affiliated with this college.
+        **Data Scoping:** Automatically scoped to caller's `collegeId` extracted from JWT.
+        **Role(s):** `COLLEGE` (own students only), `ADMIN`. (FR-INT-05, OD-04)
+      operationId: getCollegeAggregatedFeedback
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: collegeId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Admin-only override
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Paginated feedback list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageCollegeFeedbackResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ============================================================================
+  # 11. MATCHING APIS
+  # ============================================================================
+  /matching/opportunities/{opportunityId}:
+    get:
+      tags:
+        - Matching
+      summary: Dynamic match evaluation for opportunity
+      description: |
+        Computes matched skills, missing skills, coverage %, and eligibility for the authenticated student.
+        **Role(s):** `STUDENT` only. (FR-MATCH-01, FR-MATCH-02)
+      operationId: evaluateOpportunityMatch
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: opportunityId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Skill match result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchResultDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /matching/recommendations:
+    get:
+      tags:
+        - Matching
+      summary: Recommended opportunities for student
+      description: |
+        Returns open opportunities ranked by skill match % descending.
+        **Role(s):** `STUDENT` only. (FR-STU-06 / S3)
+      operationId: getRecommendedOpportunities
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Ranked recommendations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageOpportunityListItemResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ============================================================================
+  # 12. ANALYTICS APIS
+  # ============================================================================
+  /analytics/skills/availability:
+    get:
+      tags:
+        - Analytics
+      summary: College student skill availability %
+      description: |
+        Computes percentage of college students possessing each skill.
+        **Data Scoping:** Automatically scoped to caller's `collegeId` extracted from JWT.
+        **Role(s):** `COLLEGE` (own college), `ADMIN`. (FR-ANL-01)
+      operationId: getSkillAvailability
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: collegeId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Admin-only override
+        - name: departmentId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Skill availability table
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SkillAvailabilityDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /analytics/skills/demand:
+    get:
+      tags:
+        - Analytics
+      summary: Industry skill demand %
+      description: |
+        Computes percentage of open opportunities requiring each skill.
+        **Scope:** Aggregated across all `OPEN` opportunities platform-wide (OD-07).
+        **Role(s):** `COLLEGE`, `ADMIN`. (FR-ANL-02, FR-ANL-04 / S6)
+      operationId: getSkillDemand
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/OpportunityType'
+      responses:
+        '200':
+          description: Skill demand table
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SkillDemandDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /analytics/skills/gap:
+    get:
+      tags:
+        - Analytics
+      summary: College skill gap dashboard
+      description: |
+        Combines industry demand % and college availability % to compute gap severity
+        (`HIGH` >= 30%, `MODERATE` >= 15%, `LOW` > 0%, `SURPLUS` <= 0%).
+        **Data Scoping:** College availability scoped to caller's `collegeId` from JWT claim.
+        **Role(s):** `COLLEGE` (own college), `ADMIN`. (FR-ANL-03, FR-ANL-05, OD-01)
+      operationId: getSkillGapDashboard
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: collegeId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Admin-only override
+        - name: severity
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/GapSeverity'
+      responses:
+        '200':
+          description: Skill gap analysis dashboard
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SkillGapDashboardDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /analytics/placement-funnel:
+    get:
+      tags:
+        - Analytics
+      summary: College recruitment placement funnel
+      description: |
+        Returns aggregated counts of applications currently residing in each recruitment stage
+        (`applied`, `underReview`, `shortlisted`, `interview`, `selected`, `rejected`) across all
+        students affiliated with the college.
+        **Data Scoping:** Automatically scoped to caller's `collegeId` extracted from JWT.
+        **Role(s):** `COLLEGE` (own students only), `ADMIN`. (FR-COL-02)
+      operationId: getPlacementFunnel
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: collegeId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Admin-only override
+        - name: departmentId
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Placement funnel statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlacementFunnelDto'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+# ==============================================================================
+# COMPONENTS (SCHEMAS, PARAMETERS, RESPONSES, SECURITY)
+# ==============================================================================
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Stateless JWT Bearer token passed in the `Authorization: Bearer <token>` header.
+
+        Note on Architectural Separation:
+        In OpenAPI 3.0, the BearerAuth security scheme represents HTTP transport-level
+        authentication (verifying a valid, unexpired token signature). Fine-grained
+        role-based access control (STUDENT, COMPANY, COLLEGE, ADMIN) and resource
+        ownership/institutional data scoping rules are enforced server-side by
+        Spring Security URL filters and @PreAuthorize method security.
+
+  parameters:
+    PageParam:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
+      description: Zero-based page index
+    SizeParam:
+      name: size
+      in: query
+      required: false
+      schema:
+        type: integer
+        default: 10
+        minimum: 1
+        maximum: 100
+      description: Number of items per page
+
+  responses:
+    Unauthorized:
+      description: Authentication missing, expired, or invalid JWT signature
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Authenticated user does not possess required role or resource ownership
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Targeted entity ID does not exist
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ValidationError:
+      description: Request payload failed schema or bean validation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    # --- Enums ---
+    UserRole:
+      type: string
+      enum: [STUDENT, COMPANY, COLLEGE, ADMIN]
+      description: System-wide user roles
+
+    RegisterRole:
+      type: string
+      enum: [STUDENT, COMPANY, COLLEGE]
+      description: Allowed self-registration roles (ADMIN excluded from public registration)
+
+    VerificationStatus:
+      type: string
+      enum: [PENDING, VERIFIED, REJECTED]
+
+    OpportunityType:
+      type: string
+      enum: [INTERNSHIP, PLACEMENT]
+
+    OpportunityMode:
+      type: string
+      enum: [ONSITE, REMOTE, HYBRID]
+
+    OpportunityStatus:
+      type: string
+      enum: [OPEN, CLOSED]
+      description: Publication status of an opportunity (new postings are created as OPEN; can be toggled between OPEN and CLOSED)
+
+    ApplicationStatus:
+      type: string
+      enum: [APPLIED, UNDER_REVIEW, SHORTLISTED, INTERVIEW, SELECTED, REJECTED]
+
+    InternshipStatus:
+      type: string
+      enum: [UPCOMING, ONGOING, COMPLETED]
+
+    GapSeverity:
+      type: string
+      enum: [HIGH, MODERATE, LOW, SURPLUS]
+
+    # --- Common Error Schemas ---
+    ErrorDetail:
+      type: object
+      properties:
+        field:
+          type: string
+          example: cgpa
+        message:
+          type: string
+          example: must be between 0.0 and 10.0
+
+    ErrorResponse:
+      type: object
+      required:
+        - timestamp
+        - status
+        - error
+        - message
+        - path
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-08-27T15:30:00Z"
+        status:
+          type: integer
+          example: 400
+        error:
+          type: string
+          example: Bad Request
+        message:
+          type: string
+          example: Validation failed
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/ErrorDetail'
+        path:
+          type: string
+          example: /api/v1/students/profile
+
+    # --- Auth Schemas ---
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - role
+        - name
+      properties:
+        email:
+          type: string
+          format: email
+          example: student@college.edu
+        password:
+          type: string
+          minLength: 8
+          example: Password@123
+        role:
+          $ref: '#/components/schemas/RegisterRole'
+        name:
+          type: string
+          description: Display name (Company/College name, or Student Full Name)
+          example: John Doe
+        collegeId:
+          type: integer
+          format: int64
+          description: Required when role is STUDENT
+          example: 1
+        departmentId:
+          type: integer
+          format: int64
+          description: Optional initial branch when role is STUDENT
+          example: 1
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@skillbridge.org
+        password:
+          type: string
+          example: Password@123
+
+    AuthResponse:
+      type: object
+      required:
+        - token
+        - role
+        - userId
+      properties:
+        token:
+          type: string
+          description: Stateless Bearer JWT token (valid for 24h)
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        role:
+          $ref: '#/components/schemas/UserRole'
+        userId:
+          type: integer
+          format: int64
+        studentProfileId:
+          type: integer
+          format: int64
+        companyProfileId:
+          type: integer
+          format: int64
+        collegeId:
+          type: integer
+          format: int64
+
+    CurrentUserResponse:
+      type: object
+      required:
+        - userId
+        - email
+        - role
+        - isActive
+      properties:
+        userId:
+          type: integer
+          format: int64
+        email:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+        isActive:
+          type: boolean
+        studentProfileId:
+          type: integer
+          format: int64
+        companyProfileId:
+          type: integer
+          format: int64
+        collegeId:
+          type: integer
+          format: int64
+
+    # --- Student Schemas ---
+    StudentProfileResponse:
+      type: object
+      required:
+        - id
+        - userId
+        - collegeId
+        - firstName
+        - lastName
+      properties:
+        id:
+          type: integer
+          format: int64
+        userId:
+          type: integer
+          format: int64
+        collegeId:
+          type: integer
+          format: int64
+        collegeName:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        departmentId:
+          type: integer
+          format: int64
+        departmentName:
+          type: string
+        departmentCode:
+          type: string
+        yearOfStudy:
+          type: integer
+          example: 3
+        cgpa:
+          type: number
+          format: float
+          example: 8.75
+        careerInterests:
+          type: string
+        portfolioUrl:
+          type: string
+        githubUrl:
+          type: string
+        resumePath:
+          type: string
+        hasResume:
+          type: boolean
+        skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillDto'
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectDto'
+        certifications:
+          type: array
+          items:
+            $ref: '#/components/schemas/CertificationDto'
+
+    UpdateStudentProfileRequest:
+      type: object
+      required:
+        - firstName
+        - lastName
+      properties:
+        firstName:
+          type: string
+          example: John
+        lastName:
+          type: string
+          example: Doe
+        departmentId:
+          type: integer
+          format: int64
+          example: 1
+        yearOfStudy:
+          type: integer
+          minimum: 1
+          maximum: 8
+          example: 3
+        cgpa:
+          type: number
+          format: float
+          minimum: 0.0
+          maximum: 10.0
+          example: 8.5
+        careerInterests:
+          type: string
+          example: Full Stack Web Development and Cloud Architecture
+        portfolioUrl:
+          type: string
+          format: uri
+        githubUrl:
+          type: string
+          format: uri
+
+    AddStudentSkillRequest:
+      type: object
+      required:
+        - skillId
+      properties:
+        skillId:
+          type: integer
+          format: int64
+
+    ProjectDto:
+      type: object
+      required:
+        - id
+        - title
+      properties:
+        id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        description:
+          type: string
+        projectUrl:
+          type: string
+
+    ProjectRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          example: Smart Attendance System
+        description:
+          type: string
+          example: Real-time face recognition attendance portal built with React and OpenCV
+        projectUrl:
+          type: string
+          format: uri
+          example: https://github.com/example/attendance
+
+    CertificationDto:
+      type: object
+      required:
+        - id
+        - title
+      properties:
+        id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        issuer:
+          type: string
+        issuedDate:
+          type: string
+          format: date
+        certificateUrl:
+          type: string
+
+    CertificationRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          example: AWS Certified Solutions Architect - Associate
+        issuer:
+          type: string
+          example: Amazon Web Services
+        issuedDate:
+          type: string
+          format: date
+          example: "2025-11-15"
+        certificateUrl:
+          type: string
+          format: uri
+
+    ResumeUploadResponse:
+      type: object
+      required:
+        - resumePath
+        - fileName
+      properties:
+        resumePath:
+          type: string
+        fileName:
+          type: string
+
+    # --- Company & College Schemas ---
+    CompanyProfileDto:
+      type: object
+      required:
+        - id
+        - userId
+        - name
+        - verificationStatus
+      properties:
+        id:
+          type: integer
+          format: int64
+        userId:
+          type: integer
+          format: int64
+        name:
+          type: string
+        industry:
+          type: string
+        description:
+          type: string
+        location:
+          type: string
+        website:
+          type: string
+        contactEmail:
+          type: string
+        contactPhone:
+          type: string
+        verificationStatus:
+          $ref: '#/components/schemas/VerificationStatus'
+
+    UpdateCompanyProfileRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        industry:
+          type: string
+        description:
+          type: string
+        location:
+          type: string
+        website:
+          type: string
+        contactEmail:
+          type: string
+        contactPhone:
+          type: string
+
+    CollegeProfileDto:
+      type: object
+      required:
+        - id
+        - userId
+        - name
+        - verificationStatus
+      properties:
+        id:
+          type: integer
+          format: int64
+        userId:
+          type: integer
+          format: int64
+        name:
+          type: string
+        address:
+          type: string
+        website:
+          type: string
+        contactEmail:
+          type: string
+        contactPhone:
+          type: string
+        verificationStatus:
+          $ref: '#/components/schemas/VerificationStatus'
+
+    UpdateCollegeProfileRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+        website:
+          type: string
+        contactEmail:
+          type: string
+        contactPhone:
+          type: string
+
+    CollegeDepartmentSummaryDto:
+      type: object
+      required:
+        - departmentId
+        - departmentName
+        - departmentCode
+        - studentCount
+      properties:
+        departmentId:
+          type: integer
+          format: int64
+        departmentName:
+          type: string
+        departmentCode:
+          type: string
+        studentCount:
+          type: integer
+
+    StudentSummaryDto:
+      type: object
+      required:
+        - id
+        - firstName
+        - lastName
+      properties:
+        id:
+          type: integer
+          format: int64
+        firstName:
+          type: string
+        lastName:
+          type: string
+        departmentName:
+          type: string
+        yearOfStudy:
+          type: integer
+        cgpa:
+          type: number
+          format: float
+        skillCount:
+          type: integer
+
+    # --- Taxonomy Schemas ---
+    SkillDto:
+      type: object
+      required:
+        - id
+        - name
+        - isActive
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+          example: Spring Boot
+        category:
+          type: string
+          example: Framework
+        isActive:
+          type: boolean
+
+    CreateSkillRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          example: Docker
+        category:
+          type: string
+          example: DevOps
+
+    UpdateSkillRequest:
+      type: object
+      required:
+        - name
+        - isActive
+      properties:
+        name:
+          type: string
+        category:
+          type: string
+        isActive:
+          type: boolean
+
+    DepartmentDto:
+      type: object
+      required:
+        - id
+        - name
+        - code
+        - isActive
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+          example: Computer Science and Engineering
+        code:
+          type: string
+          example: CSE
+        isActive:
+          type: boolean
+
+    CreateDepartmentRequest:
+      type: object
+      required:
+        - name
+        - code
+      properties:
+        name:
+          type: string
+          example: Information Technology
+        code:
+          type: string
+          example: IT
+
+    # --- Opportunity Schemas ---
+    CreateOpportunityRequest:
+      type: object
+      required:
+        - title
+        - type
+        - requiredSkillIds
+      properties:
+        title:
+          type: string
+          example: Junior Backend Developer Intern
+        description:
+          type: string
+        type:
+          $ref: '#/components/schemas/OpportunityType'
+        location:
+          type: string
+        mode:
+          $ref: '#/components/schemas/OpportunityMode'
+        durationWeeks:
+          type: integer
+          example: 12
+        stipendAmount:
+          type: number
+          format: float
+          example: 25000.00
+        stipendCurrency:
+          type: string
+          default: INR
+        minCgpa:
+          type: number
+          format: float
+          example: 7.5
+        applicationDeadline:
+          type: string
+          format: date
+          example: "2026-09-30"
+        requiredSkillIds:
+          type: array
+          minItems: 1
+          items:
+            type: integer
+            format: int64
+          description: List of skill IDs required for the role (at least 1 required skill must be specified)
+        requiredDepartmentIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+          description: Empty indicates all departments eligible
+        requiredYearsOfStudy:
+          type: array
+          items:
+            type: integer
+          description: Empty indicates all years eligible
+
+    UpdateOpportunityRequest:
+      type: object
+      required:
+        - title
+        - type
+        - requiredSkillIds
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        type:
+          $ref: '#/components/schemas/OpportunityType'
+        location:
+          type: string
+        mode:
+          $ref: '#/components/schemas/OpportunityMode'
+        durationWeeks:
+          type: integer
+        stipendAmount:
+          type: number
+          format: float
+        stipendCurrency:
+          type: string
+        minCgpa:
+          type: number
+          format: float
+        applicationDeadline:
+          type: string
+          format: date
+        requiredSkillIds:
+          type: array
+          minItems: 1
+          items:
+            type: integer
+            format: int64
+          description: List of skill IDs required for the role (at least 1 required skill must be specified)
+        requiredDepartmentIds:
+          type: array
+          items:
+            type: integer
+            format: int64
+        requiredYearsOfStudy:
+          type: array
+          items:
+            type: integer
+
+    OpportunityListItemDto:
+      type: object
+      required:
+        - id
+        - companyId
+        - companyName
+        - title
+        - type
+        - mode
+        - status
+      properties:
+        id:
+          type: integer
+          format: int64
+        companyId:
+          type: integer
+          format: int64
+        companyName:
+          type: string
+        companyLocation:
+          type: string
+        companyVerificationStatus:
+          $ref: '#/components/schemas/VerificationStatus'
+        title:
+          type: string
+        type:
+          $ref: '#/components/schemas/OpportunityType'
+        mode:
+          $ref: '#/components/schemas/OpportunityMode'
+        stipendAmount:
+          type: number
+          format: float
+        applicationDeadline:
+          type: string
+          format: date
+        status:
+          $ref: '#/components/schemas/OpportunityStatus'
+        requiredSkills:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillDto'
+        matchPercent:
+          type: number
+          format: float
+          description: Computed for student session
+          example: 80.0
+        isEligible:
+          type: boolean
+          description: Computed for student session
+          example: true
+
+    OpportunityDetailDto:
+      type: object
+      required:
+        - id
+        - companyId
+        - companyName
+        - title
+        - type
+        - mode
+        - status
+      properties:
+        id:
+          type: integer
+          format: int64
+        companyId:
+          type: integer
+          format: int64
+        companyName:
+          type: string
+        companyWebsite:
+          type: string
+        companyVerificationStatus:
+          $ref: '#/components/schemas/VerificationStatus'
+        title:
+          type: string
+        description:
+          type: string
+        type:
+          $ref: '#/components/schemas/OpportunityType'
+        location:
+          type: string
+        mode:
+          $ref: '#/components/schemas/OpportunityMode'
+        durationWeeks:
+          type: integer
+        stipendAmount:
+          type: number
+          format: float
+        stipendCurrency:
+          type: string
+        minCgpa:
+          type: number
+          format: float
+        applicationDeadline:
+          type: string
+          format: date
+        status:
+          $ref: '#/components/schemas/OpportunityStatus'
+        requiredSkills:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillDto'
+        eligibleDepartments:
+          type: array
+          items:
+            $ref: '#/components/schemas/DepartmentDto'
+        eligibleYears:
+          type: array
+          items:
+            type: integer
+        matchBreakdown:
+          $ref: '#/components/schemas/MatchResultDto'
+
+    # --- Application & Recruitment Schemas ---
+    SubmitApplicationRequest:
+      type: object
+      required:
+        - opportunityId
+      properties:
+        opportunityId:
+          type: integer
+          format: int64
+
+    ApplicationDto:
+      type: object
+      required:
+        - id
+        - studentProfileId
+        - opportunityId
+        - status
+        - matchPercentAtApply
+        - appliedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        studentProfileId:
+          type: integer
+          format: int64
+        opportunityId:
+          type: integer
+          format: int64
+        status:
+          $ref: '#/components/schemas/ApplicationStatus'
+        matchPercentAtApply:
+          type: number
+          format: float
+          example: 85.50
+        appliedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    StudentApplicationDto:
+      type: object
+      required:
+        - id
+        - opportunityId
+        - opportunityTitle
+        - companyName
+        - status
+        - matchPercentAtApply
+        - appliedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        opportunityId:
+          type: integer
+          format: int64
+        opportunityTitle:
+          type: string
+        opportunityType:
+          $ref: '#/components/schemas/OpportunityType'
+        companyName:
+          type: string
+        status:
+          $ref: '#/components/schemas/ApplicationStatus'
+        matchPercentAtApply:
+          type: number
+          format: float
+        appliedAt:
+          type: string
+          format: date-time
+
+    CompanyApplicantDto:
+      type: object
+      required:
+        - applicationId
+        - studentProfileId
+        - studentName
+        - status
+        - matchPercentAtApply
+        - appliedAt
+      properties:
+        applicationId:
+          type: integer
+          format: int64
+        studentProfileId:
+          type: integer
+          format: int64
+        studentName:
+          type: string
+        departmentName:
+          type: string
+        yearOfStudy:
+          type: integer
+        cgpa:
+          type: number
+          format: float
+        status:
+          $ref: '#/components/schemas/ApplicationStatus'
+        matchPercentAtApply:
+          type: number
+          format: float
+        hasResume:
+          type: boolean
+        appliedAt:
+          type: string
+          format: date-time
+
+    ApplicationDetailDto:
+      type: object
+      required:
+        - id
+        - studentProfileId
+        - opportunityId
+        - status
+        - matchPercentAtApply
+        - appliedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        studentProfileId:
+          type: integer
+          format: int64
+        studentName:
+          type: string
+        studentEmail:
+          type: string
+        departmentName:
+          type: string
+        cgpa:
+          type: number
+          format: float
+        opportunityId:
+          type: integer
+          format: int64
+        opportunityTitle:
+          type: string
+        companyName:
+          type: string
+        status:
+          $ref: '#/components/schemas/ApplicationStatus'
+        matchPercentAtApply:
+          type: number
+          format: float
+        appliedAt:
+          type: string
+          format: date-time
+        resumeDownloadUrl:
+          type: string
+
+    # --- Internship & Feedback Schemas ---
+    InternshipRecordDto:
+      type: object
+      required:
+        - id
+        - applicationId
+        - studentName
+        - companyName
+        - opportunityTitle
+        - type
+        - status
+      properties:
+        id:
+          type: integer
+          format: int64
+        applicationId:
+          type: integer
+          format: int64
+        studentId:
+          type: integer
+          format: int64
+        studentName:
+          type: string
+        companyId:
+          type: integer
+          format: int64
+        companyName:
+          type: string
+        opportunityTitle:
+          type: string
+        type:
+          $ref: '#/components/schemas/OpportunityType'
+        status:
+          $ref: '#/components/schemas/InternshipStatus'
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        feedbackSubmitted:
+          type: boolean
+
+    SubmitFeedbackRequest:
+      type: object
+      required:
+        - feedbackText
+      properties:
+        feedbackText:
+          type: string
+          minLength: 10
+          example: Exceptional problem-solving skills and strong team communication throughout the internship.
+
+    FeedbackDto:
+      type: object
+      required:
+        - id
+        - internshipRecordId
+        - feedbackText
+        - submittedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        internshipRecordId:
+          type: integer
+          format: int64
+        studentName:
+          type: string
+        companyName:
+          type: string
+        feedbackText:
+          type: string
+        submittedAt:
+          type: string
+          format: date-time
+
+    CollegeFeedbackItemDto:
+      type: object
+      required:
+        - id
+        - studentName
+        - companyName
+        - opportunityTitle
+        - feedbackText
+        - submittedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        studentName:
+          type: string
+        departmentName:
+          type: string
+        companyName:
+          type: string
+        opportunityTitle:
+          type: string
+        feedbackText:
+          type: string
+        submittedAt:
+          type: string
+          format: date-time
+
+    # --- Matching Schemas ---
+    MatchResultDto:
+      type: object
+      required:
+        - matchedSkills
+        - missingSkills
+        - matchPercent
+        - isEligible
+      properties:
+        matchedSkills:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillDto'
+        missingSkills:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillDto'
+        matchPercent:
+          type: number
+          format: float
+          example: 66.67
+        isEligible:
+          type: boolean
+          example: true
+        ineligibilityReasons:
+          type: array
+          items:
+            type: string
+          example: ["CGPA below required minimum (required: 8.0)"]
+
+    # --- Analytics Schemas ---
+    SkillAvailabilityDto:
+      type: object
+      required:
+        - skillId
+        - skillName
+        - availabilityPercent
+        - studentCount
+      properties:
+        skillId:
+          type: integer
+          format: int64
+        skillName:
+          type: string
+        category:
+          type: string
+        availabilityPercent:
+          type: number
+          format: float
+          example: 45.50
+        studentCount:
+          type: integer
+          example: 91
+
+    SkillDemandDto:
+      type: object
+      required:
+        - skillId
+        - skillName
+        - demandPercent
+        - opportunityCount
+      properties:
+        skillId:
+          type: integer
+          format: int64
+        skillName:
+          type: string
+        category:
+          type: string
+        demandPercent:
+          type: number
+          format: float
+          example: 64.00
+        opportunityCount:
+          type: integer
+          example: 16
+
+    SkillGapItemDto:
+      type: object
+      required:
+        - skillId
+        - skillName
+        - demandPercent
+        - availabilityPercent
+        - gapPercent
+        - severity
+      properties:
+        skillId:
+          type: integer
+          format: int64
+        skillName:
+          type: string
+        category:
+          type: string
+        demandPercent:
+          type: number
+          format: float
+          example: 64.0
+        availabilityPercent:
+          type: number
+          format: float
+          example: 24.0
+        gapPercent:
+          type: number
+          format: float
+          example: 40.0
+        severity:
+          $ref: '#/components/schemas/GapSeverity'
+
+    SkillGapDashboardDto:
+      type: object
+      required:
+        - collegeId
+        - totalStudents
+        - totalOpenOpportunities
+        - gaps
+      properties:
+        collegeId:
+          type: integer
+          format: int64
+        totalStudents:
+          type: integer
+          example: 200
+        totalOpenOpportunities:
+          type: integer
+          example: 25
+        gaps:
+          type: array
+          items:
+            $ref: '#/components/schemas/SkillGapItemDto'
+
+    PlacementFunnelDto:
+      type: object
+      required:
+        - applied
+        - underReview
+        - shortlisted
+        - interview
+        - selected
+        - rejected
+        - totalApplications
+      properties:
+        applied:
+          type: integer
+          description: Applications currently in APPLIED stage (awaiting initial review)
+          example: 35
+        underReview:
+          type: integer
+          description: Applications currently in UNDER_REVIEW stage
+          example: 25
+        shortlisted:
+          type: integer
+          description: Applications currently in SHORTLISTED stage
+          example: 20
+        interview:
+          type: integer
+          description: Applications currently in INTERVIEW stage
+          example: 15
+        selected:
+          type: integer
+          description: Applications currently in SELECTED stage (confirmed outcomes)
+          example: 10
+        rejected:
+          type: integer
+          description: Applications currently in REJECTED stage
+          example: 15
+        totalApplications:
+          type: integer
+          description: Total applications submitted across all recruitment stages (sum of applied + underReview + shortlisted + interview + selected + rejected)
+          example: 120
+
+    # --- Admin Schemas ---
+    AdminUserDto:
+      type: object
+      required:
+        - id
+        - email
+        - role
+        - isActive
+        - createdAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        email:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    VerificationItemDto:
+      type: object
+      required:
+        - id
+        - type
+        - name
+        - verificationStatus
+        - submittedAt
+      properties:
+        id:
+          type: integer
+          format: int64
+        type:
+          type: string
+          enum: [COLLEGE, COMPANY]
+        name:
+          type: string
+        contactEmail:
+          type: string
+        website:
+          type: string
+        verificationStatus:
+          $ref: '#/components/schemas/VerificationStatus'
+        submittedAt:
+          type: string
+          format: date-time
+
+    # --- Paginated Wrapper Schemas ---
+    PageMetadata:
+      type: object
+      required:
+        - page
+        - size
+        - totalElements
+        - totalPages
+        - isFirst
+        - isLast
+      properties:
+        page:
+          type: integer
+          example: 0
+        size:
+          type: integer
+          example: 10
+        totalElements:
+          type: integer
+          format: int64
+          example: 45
+        totalPages:
+          type: integer
+          example: 5
+        isFirst:
+          type: boolean
+          example: true
+        isLast:
+          type: boolean
+          example: false
+
+    PageStudentSummaryResponse:
+      type: object
+      required:
+        - content
+        - page
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudentSummaryDto'
+        page:
+          $ref: '#/components/schemas/PageMetadata'
+
+    PageAdminUserResponse:
+      type: object
+      required:
+        - content
+        - page
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUserDto'
+        page:
+          $ref: '#/components/schemas/PageMetadata'
+
+    PageOpportunityListItemResponse:
+      type: object
+      required:
+        - content
+        - page
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpportunityListItemDto'
+        page:
+          $ref: '#/components/schemas/PageMetadata'
+
+    PageStudentApplicationResponse:
+      type: object
+      required:
+        - content
+        - page
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/StudentApplicationDto'
+        page:
+          $ref: '#/components/schemas/PageMetadata'
+
+    PageCompanyApplicantResponse:
+      type: object
+      required:
+        - content
+        - page
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompanyApplicantDto'
+        page:
+          $ref: '#/components/schemas/PageMetadata'
+
+    PageInternshipRecordResponse:
+      type: object
+      required:
+        - content
+        - page
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/InternshipRecordDto'
+        page:
+          $ref: '#/components/schemas/PageMetadata'
+
+    PageCollegeFeedbackResponse:
+      type: object
+      required:
+        - content
+        - page
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/CollegeFeedbackItemDto'
+        page:
+          $ref: '#/components/schemas/PageMetadata'
