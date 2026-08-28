@@ -7,26 +7,34 @@ Define the version control and collaboration standards for the two-person hackat
 
 ## 1. Branch Strategy & Structure
 
-The repository maintains two primary development tracks stemming from `main`:
+The repository maintains two primary persistent integration tracks stemming from `main`:
 
 ```
 main (Production / Stable Baseline)
-├── backend (Active Backend Track)
-│   ├── backend/auth
-│   ├── backend/opportunities
-│   ├── backend/applications
-│   └── backend/analytics
 │
-└── frontend (Active Frontend Track)
-    ├── frontend/auth
-    ├── frontend/student-dashboard
-    ├── frontend/opportunity-browse
-    └── frontend/college-analytics
+├── feature/backend (Persistent Backend Integration Branch)
+│   ├── feature/backend/project-setup
+│   ├── feature/backend/auth
+│   ├── feature/backend/student
+│   ├── feature/backend/company
+│   ├── feature/backend/opportunities
+│   ├── feature/backend/matching
+│   ├── feature/backend/applications
+│   └── feature/backend/analytics
+│
+└── feature/frontend (Persistent Frontend Integration Branch)
+    ├── feature/frontend/project-setup
+    ├── feature/frontend/auth
+    ├── feature/frontend/student-dashboard
+    ├── feature/frontend/skills
+    ├── feature/frontend/opportunity-browse
+    ├── feature/frontend/candidate-review
+    └── feature/frontend/college-analytics
 ```
 
 - **`main`:** Contains verified, integrated, and passing code. Direct commits to `main` are reserved for baseline documentation milestones.
-- **`backend` & `frontend`:** Persistent integration branches for the backend and frontend developers respectively.
-- **Feature Branches:** Created for isolated vertical slices or screens (`backend/<feature>`, `frontend/<screen>`), merged back into their respective track branch once tested.
+- **`feature/backend` & `feature/frontend`:** Persistent integration branches for the backend and frontend developers respectively.
+- **Temporary Feature Branches:** Individual development tasks are implemented in temporary feature branches created from their respective integration branch (e.g. `feature/backend/<task>` or `feature/frontend/<task>`) and merged back into `feature/backend` or `feature/frontend` once tested and verified.
 
 ---
 
@@ -35,13 +43,13 @@ main (Production / Stable Baseline)
 1. **Pull Before Starting:** Always run `git pull --rebase` on your working branch before starting a task to avoid diverged commit histories.
 2. **Small Logical Commits:** Make small, atomic commits focused on a single responsibility.
 3. **No Cross-Track Interference:** Never modify files on the other developer's feature branch. Keep backend (`apps/api/` or `backend/`) and frontend (`apps/web/` or `frontend/`) changes separate in distinct commits.
-4. **Never Force-Push Shared Branches:** `git push --force` is strictly forbidden on `main`, `backend`, and `frontend`.
+4. **Never Force-Push Shared Branches:** `git push --force` is strictly forbidden on `main`, `feature/backend`, and `feature/frontend`.
 5. **Never Commit Secrets or Build Artifacts:**
    - Never commit passwords, JWT secrets, database connection strings, or `.env` files.
    - Ensure `.gitignore` ignores `node_modules/`, `target/`, `build/`, `dist/`, `.idea/`, `.vscode/`, `.DS_Store`.
 6. **No Unrelated Formatting in Feature Commits:** Do not run whole-project automatic linters or formatters that introduce massive noisy diffs across untouched files.
 7. **Careful Conflict Resolution:** When merging, review conflicts line by line. Never blindly accept "ours" or "theirs".
-8. **Pre-Merge Verification:** Run build and tests (`npm run build`, `./mvnw test`) before opening a PR or merging into integration branches.
+8. **Pre-Merge Verification:** Run build and tests (`npm run build`, `./mvnw test`) before opening a PR or merging into `feature/backend` or `feature/frontend`.
 
 ---
 
