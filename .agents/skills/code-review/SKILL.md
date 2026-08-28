@@ -1,0 +1,8 @@
+Correctness
+Security
+Architecture
+Validation
+Authorization
+Performance
+Tests
+Regression
