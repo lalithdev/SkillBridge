@@ -1,4 +1,4 @@
-package com.skillbridge.user.entity;
+package com.skillbridge.college.entity;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -13,10 +13,9 @@ import java.time.Instant;
 
 @Entity
 @Table(
-    name = "users",
+    name = "departments",
     indexes = {
-        @Index(name = "idx_users_role", columnList = "role"),
-        @Index(name = "idx_users_is_active", columnList = "is_active")
+        @Index(name = "idx_departments_is_active", columnList = "is_active")
     }
 )
 @Getter
@@ -24,21 +23,17 @@ import java.time.Instant;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class User {
+public class Department {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 255)
-    private String email;
+    @Column(nullable = false, unique = true, length = 150)
+    private String name;
 
-    @Column(nullable = false, length = 255)
-    private String password;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private Role role;
+    @Column(nullable = false, unique = true, length = 50)
+    private String code;
 
     @Column(name = "is_active", nullable = false)
     @Builder.Default
