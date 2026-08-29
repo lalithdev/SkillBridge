@@ -17,3 +17,10 @@ spring:
 
 server:
   port: ${PORT:8080}
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+    expiry-ms: ${JWT_EXPIRY_MS:86400000} # 24 hours (86,400,000 ms)
+  file:
+    upload-dir: ${FILE_UPLOAD_DIR:./uploads/resumes}
