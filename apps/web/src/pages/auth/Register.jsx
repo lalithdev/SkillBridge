@@ -1,11 +1,13 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link, useNavigate, Navigate } from 'react-router-dom';
-import { Mail, Lock, User, Building2, GraduationCap, Eye, EyeOff, Check, ArrowRight } from 'lucide-react';
+import { Mail, Lock, User, Building2, GraduationCap, Eye, EyeOff, Check, ArrowRight, Phone } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/Toast';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import { getDashboardPath } from '@/utils/auth';
+import { collegeApi } from '@/api';
+import { apiClient } from '@/api/client';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -15,10 +17,39 @@ export default function Register() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [colleges, setColleges] = useState([]);
+  const [departments, setDepartments] = useState([]);
   const [form, setForm] = useState({
     name: '', email: '', password: '', confirmPassword: '',
-    phone: '', college: '', company: '', website: '', graduationYear: '',
+    phone: '', collegeId: '', college: '', company: '', website: '', graduationYear: '', departmentId: '',
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadData() {
+      try {
+        const [collegesData, deptsData] = await Promise.allSettled([
+          collegeApi.getPublic(),
+          apiClient.get('/departments').then((r) => r.data),
+        ]);
+        if (!cancelled) {
+          if (collegesData.status === 'fulfilled' && Array.isArray(collegesData.value)) {
+            setColleges(collegesData.value);
+            if (collegesData.value.length > 0 && !form.collegeId) {
+              setForm((prev) => ({ ...prev, collegeId: String(collegesData.value[0].id) }));
+            }
+          }
+          if (deptsData.status === 'fulfilled' && Array.isArray(deptsData.value)) {
+            setDepartments(deptsData.value);
+          }
+        }
+      } catch {
+        // best effort
+      }
+    }
+    loadData();
+    return () => { cancelled = true; };
+  }, []);
 
   const roles = [
     { value: 'student', label: 'Student', icon: GraduationCap },
@@ -49,8 +80,9 @@ export default function Register() {
     if (!form.password) e.password = 'Password is required';
     else if (form.password.length < 8) e.password = 'Password must be at least 8 characters';
     if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match';
-    if (role === 'student' && !form.college) e.college = 'College is required';
+    if (role === 'student' && !form.collegeId) e.collegeId = 'Please select your college';
     if (role === 'company' && !form.company) e.company = 'Company name is required';
+    if (role === 'college' && !form.college) e.college = 'College name is required';
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -64,16 +96,19 @@ export default function Register() {
     if (!validate()) return;
     setLoading(true);
     try {
+      const selectedCollegeObj = colleges.find((c) => String(c.id) === String(form.collegeId));
       const registeredUser = await register({
         name: form.name,
         email: form.email,
         password: form.password,
         role,
         phone: form.phone,
-        college: form.college,
+        collegeId: form.collegeId,
+        college: selectedCollegeObj ? selectedCollegeObj.name : form.college,
         company: form.company,
         website: form.website,
         graduationYear: form.graduationYear,
+        departmentId: form.departmentId,
       });
       toast.success('Account created! Welcome to SkillBridge.');
       navigate(getDashboardPath(registeredUser.role || role), { replace: true });
@@ -130,9 +165,31 @@ export default function Register() {
 
             {role === 'student' && (
               <>
-                <Input label="Phone Number" name="phone" icon={User} placeholder="+91 98765 43210" value={form.phone} onChange={setField('phone')} />
-                <Input label="College Name" name="college" placeholder="Your college name" required value={form.college} onChange={setField('college')} error={errors.college} />
-                <Input label="Graduation Year" name="graduationYear" type="number" placeholder="2025" value={form.graduationYear} onChange={setField('graduationYear')} />
+                <Input label="Phone Number" name="phone" icon={Phone} placeholder="+91 98765 43210" value={form.phone} onChange={setField('phone')} />
+                
+                <Input
+                  label="Select College"
+                  name="collegeId"
+                  type="select"
+                  required
+                  value={form.collegeId}
+                  onChange={setField('collegeId')}
+                  error={errors.collegeId}
+                  options={colleges.map((c) => ({ value: String(c.id), label: c.name }))}
+                />
+
+                {departments.length > 0 && (
+                  <Input
+                    label="Department / Branch"
+                    name="departmentId"
+                    type="select"
+                    value={form.departmentId}
+                    onChange={setField('departmentId')}
+                    options={departments.map((d) => ({ value: String(d.id), label: `${d.name} (${d.code})` }))}
+                  />
+                )}
+
+                <Input label="Graduation Year" name="graduationYear" type="number" placeholder="2026" value={form.graduationYear} onChange={setField('graduationYear')} />
               </>
             )}
 

@@ -1,6 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { Award, Plus, TrendingUp } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useStudentSkills, useMasterSkills } from '@/hooks/useData';
+import { studentApi } from '@/api';
+import { queryKeys } from '@/utils/constants';
 import PageQueryState from '@/components/shared/PageQueryState';
 import { useToast } from '@/components/ui/Toast';
 import Card, { CardBody } from '@/components/ui/Card';
@@ -12,11 +15,12 @@ import Input from '@/components/ui/Input';
 
 export default function StudentSkills() {
   const toast = useToast();
+  const queryClient = useQueryClient();
   const skillsQuery = useStudentSkills();
   const masterSkillsQuery = useMasterSkills();
-  const [skills, setSkills] = useState([]);
   const [addOpen, setAddOpen] = useState(false);
-  const [newSkill, setNewSkill] = useState('');
+  const [selectedSkillId, setSelectedSkillId] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const isLoading = skillsQuery.isLoading || masterSkillsQuery.isLoading;
   const isError = skillsQuery.isError || masterSkillsQuery.isError;
@@ -26,30 +30,67 @@ export default function StudentSkills() {
     masterSkillsQuery.refetch();
   };
 
-  useEffect(() => {
-    if (skillsQuery.data) setSkills(skillsQuery.data);
-  }, [skillsQuery.data]);
+  const skills = useMemo(() => skillsQuery.data || [], [skillsQuery.data]);
 
-  const allSkills = masterSkillsQuery.data || [];
+  const masterSkills = useMemo(() => {
+    const list = masterSkillsQuery.data || [];
+    return Array.isArray(list) ? list : list.content || [];
+  }, [masterSkillsQuery.data]);
 
-  const handleAdd = () => {
-    if (!newSkill) return;
-    if (skills.some((s) => s.name === newSkill)) {
-      toast.error('Skill already exists');
+  const currentSkillIds = useMemo(() => {
+    return new Set(skills.map((s) => (typeof s === 'object' ? s.id : null)).filter(Boolean));
+  }, [skills]);
+
+  const availableMasterSkills = useMemo(() => {
+    return masterSkills.filter((s) => !currentSkillIds.has(s.id));
+  }, [masterSkills, currentSkillIds]);
+
+  const handleAdd = async () => {
+    if (!selectedSkillId) {
+      toast.error('Please select a skill');
       return;
     }
-    setSkills([...skills, { name: newSkill, level: 50, category: 'General' }]);
-    toast.success(`Skill "${newSkill}" added!`);
-    setNewSkill('');
-    setAddOpen(false);
+
+    setSubmitting(true);
+    try {
+      await studentApi.addSkill(Number(selectedSkillId));
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.students.skills }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.students.profile }),
+      ]);
+      toast.success('Skill added successfully!');
+      setSelectedSkillId('');
+      setAddOpen(false);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to add skill.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleRemove = (name) => {
-    setSkills(skills.filter((s) => s.name !== name));
-    toast.info(`Skill "${name}" removed`);
+  const handleRemove = async (skillItem) => {
+    const skillId = typeof skillItem === 'object' ? skillItem.id : null;
+    const skillName = typeof skillItem === 'object' ? skillItem.name : skillItem;
+    if (!skillId) {
+      toast.error('Unable to find skill ID for deletion.');
+      return;
+    }
+
+    try {
+      await studentApi.removeSkill(skillId);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.students.skills }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.students.profile }),
+      ]);
+      toast.info(`Skill "${skillName}" removed`);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || 'Failed to remove skill.');
+    }
   };
 
-  const categories = [...new Set(skills.map((s) => s.category))];
+  const categories = useMemo(() => {
+    return [...new Set(skills.map((s) => (typeof s === 'object' ? s.category || 'General' : 'General')))];
+  }, [skills]);
 
   return (
     <PageQueryState isLoading={isLoading} isError={isError} error={error} onRetry={refetch}>
@@ -63,40 +104,94 @@ export default function StudentSkills() {
         </div>
 
         <div className="grid grid-3 mb-8">
-          <div className="stat-card"><div className="stat-card-icon" style={{ background: 'var(--primary-50)', color: 'var(--primary-600)' }}><Award size={22} /></div><div className="stat-card-value">{skills.length}</div><div className="stat-card-label">Total Skills</div></div>
-          <div className="stat-card"><div className="stat-card-icon" style={{ background: 'var(--success-50)', color: 'var(--success-600)' }}><TrendingUp size={22} /></div><div className="stat-card-value">{skills.filter((s) => s.level >= 80).length}</div><div className="stat-card-label">Advanced Skills</div></div>
-          <div className="stat-card"><div className="stat-card-icon" style={{ background: 'var(--warning-50)', color: 'var(--warning-600)' }}><Award size={22} /></div><div className="stat-card-value">{skills.filter((s) => s.level < 70).length}</div><div className="stat-card-label">Skills to Improve</div></div>
+          <div className="stat-card">
+            <div className="stat-card-icon" style={{ background: 'var(--primary-50)', color: 'var(--primary-600)' }}><Award size={22} /></div>
+            <div className="stat-card-value">{skills.length}</div>
+            <div className="stat-card-label">Total Skills</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-icon" style={{ background: 'var(--success-50)', color: 'var(--success-600)' }}><TrendingUp size={22} /></div>
+            <div className="stat-card-value">{skills.filter((s) => (s.level || 75) >= 80).length}</div>
+            <div className="stat-card-label">Advanced Skills</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-card-icon" style={{ background: 'var(--warning-50)', color: 'var(--warning-600)' }}><Award size={22} /></div>
+            <div className="stat-card-value">{skills.filter((s) => (s.level || 75) < 70).length}</div>
+            <div className="stat-card-label">Skills to Improve</div>
+          </div>
         </div>
 
-        {categories.map((cat) => (
-          <Card key={cat} className="mb-6">
-            <CardBody>
-              <h3 className="card-title mb-6">{cat}</h3>
-              <div className="flex flex-col gap-5">
-                {skills.filter((s) => s.category === cat).map((s) => (
-                  <div key={s.name}>
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-semibold">{s.name}</span>
-                        <SkillBadge skill={`${s.level}%`} />
-                      </div>
-                      <button onClick={() => handleRemove(s.name)} className="text-xs text-tertiary" style={{ cursor: 'pointer', color: 'var(--error-500)' }}>Remove</button>
-                    </div>
-                    <ProgressBar value={s.level} showValue={false} height={6} variant={s.level >= 80 ? 'success' : s.level >= 60 ? 'default' : 'warning'} />
-                  </div>
-                ))}
-              </div>
+        {skills.length === 0 ? (
+          <Card className="mb-6">
+            <CardBody style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
+              <p className="text-secondary mb-4">You have not added any skills to your profile yet.</p>
+              <Button variant="primary" icon={Plus} onClick={() => setAddOpen(true)}>Add Your First Skill</Button>
             </CardBody>
           </Card>
-        ))}
+        ) : (
+          categories.map((cat) => {
+            const catSkills = skills.filter((s) => (s.category || 'General') === cat);
+            return (
+              <Card key={cat} className="mb-6">
+                <CardBody>
+                  <h3 className="card-title mb-6">{cat}</h3>
+                  <div className="flex flex-col gap-5">
+                    {catSkills.map((s) => {
+                      const skillName = typeof s === 'object' ? s.name : s;
+                      const level = typeof s === 'object' ? (s.level || 75) : 75;
+                      return (
+                        <div key={typeof s === 'object' ? (s.id || s.name) : s}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-3">
+                              <span className="text-sm font-semibold">{skillName}</span>
+                              <SkillBadge skill={`${level}%`} />
+                            </div>
+                            <button
+                              onClick={() => handleRemove(s)}
+                              className="text-xs"
+                              style={{ cursor: 'pointer', color: 'var(--error-500)', background: 'none', border: 'none', padding: 0 }}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                          <ProgressBar
+                            value={level}
+                            showValue={false}
+                            height={6}
+                            variant={level >= 80 ? 'success' : level >= 60 ? 'default' : 'warning'}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardBody>
+              </Card>
+            );
+          })
+        )}
 
-        <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add New Skill"
-          footer={<><Button variant="ghost" onClick={() => setAddOpen(false)}>Cancel</Button><Button variant="primary" icon={Plus} onClick={handleAdd}>Add Skill</Button></>}
+        <Modal
+          open={addOpen}
+          onClose={() => setAddOpen(false)}
+          title="Add New Skill"
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setAddOpen(false)}>Cancel</Button>
+              <Button variant="primary" icon={Plus} loading={submitting} onClick={handleAdd}>Add Skill</Button>
+            </>
+          }
         >
-          <Input label="Skill Name" placeholder="e.g. Docker" value={newSkill} onChange={(e) => setNewSkill(e.target.value)} autoFocus />
-          <Input label="Proficiency Level" type="select" options={[{ value: '30', label: 'Beginner (30%)' }, { value: '60', label: 'Intermediate (60%)' }, { value: '85', label: 'Advanced (85%)' }]} />
-          {allSkills.length > 0 && (
-            <p className="form-hint" style={{ marginTop: 'var(--space-2)' }}>Suggested: {allSkills.slice(0, 8).join(', ')}</p>
+          {availableMasterSkills.length > 0 ? (
+            <Input
+              label="Select Skill"
+              type="select"
+              value={selectedSkillId}
+              onChange={(e) => setSelectedSkillId(e.target.value)}
+              options={availableMasterSkills.map((s) => ({ value: String(s.id), label: `${s.name} (${s.category || 'General'})` }))}
+              autoFocus
+            />
+          ) : (
+            <p className="text-sm text-secondary">All available master skills are already present on your profile.</p>
           )}
         </Modal>
       </div>

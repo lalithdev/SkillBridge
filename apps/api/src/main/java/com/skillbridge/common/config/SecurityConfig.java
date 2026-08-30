@@ -63,8 +63,10 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler())
                 )
                 .authorizeHttpRequests(auth -> auth
-                        // Public authentication endpoints
+                        // Public authentication & taxonomy endpoints
                         .requestMatchers("/api/v1/auth/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/colleges/public").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/departments").permitAll()
                         .requestMatchers("/error").permitAll()
 
                         // Role-gated URL filters

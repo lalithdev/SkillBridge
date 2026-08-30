@@ -6,6 +6,7 @@
 # Frontend
 node_modules/
 dist/
+.vite/
 
 # Backend
 target/

@@ -28,13 +28,27 @@ function normalizeStudentProfile(p) {
 
   return {
     ...p,
+    id: p.id,
+    userId: p.userId,
     name: fullName,
+    firstName: p.firstName || '',
+    lastName: p.lastName || '',
     email: p.email || '',
+    phone: p.phone || '',
+    collegeId: p.collegeId || null,
     college: p.collegeName || p.college || '',
+    collegeName: p.collegeName || p.college || '',
+    departmentId: p.departmentId || null,
     degree: p.degree || 'B.Tech',
     branch: p.departmentName || p.departmentCode || p.branch || '',
-    graduationYear: p.graduationYear || (p.yearOfStudy ? String(new Date().getFullYear() + (4 - p.yearOfStudy)) : ''),
+    departmentName: p.departmentName || '',
+    yearOfStudy: p.yearOfStudy || null,
+    graduationYear: p.graduationYear ? String(p.graduationYear) : (p.yearOfStudy ? String(new Date().getFullYear() + (4 - p.yearOfStudy)) : ''),
+    cgpa: p.cgpa != null ? String(p.cgpa) : '',
     bio: p.careerInterests || p.bio || '',
+    careerInterests: p.careerInterests || p.bio || '',
+    portfolioUrl: p.portfolioUrl || '',
+    githubUrl: p.githubUrl || '',
     profileCompletion,
     skills: (p.skills || []).map((s) => (typeof s === 'string' ? { name: s, level: 75, category: 'General' } : {
       id: s.id,
@@ -239,10 +253,18 @@ export const studentApi = {
       () => mockDataService.student.getSkills(),
       () => apiClient.get('/students/profile/skills').then((r) => normalizeSkills(r.data)),
     ),
-  addSkill: (skillId) =>
-    apiClient.post('/students/profile/skills', { skillId }).then((r) => r.data),
+  addSkill: (payload) => {
+    const body = typeof payload === 'object' ? payload : { skillId: Number(payload) };
+    return withMock(
+      () => mockDataService.student.addSkill(body),
+      () => apiClient.post('/students/profile/skills', body).then((r) => r.data),
+    );
+  },
   removeSkill: (skillId) =>
-    apiClient.delete(`/students/profile/skills/${skillId}`).then((r) => r.data),
+    withMock(
+      () => mockDataService.student.removeSkill(skillId),
+      () => apiClient.delete(`/students/profile/skills/${skillId}`).then((r) => r.data),
+    ),
   getProjects: () =>
     apiClient.get('/students/profile/projects').then((r) => r.data),
   addProject: (payload) =>
@@ -408,6 +430,15 @@ export const companyApi = {
 };
 
 export const collegeApi = {
+  getPublic: () =>
+    withMock(
+      () => Promise.resolve([
+        { id: 1, name: 'Indian Institute of Technology, Delhi' },
+        { id: 2, name: 'National Institute of Technology, Trichy' },
+        { id: 3, name: 'BITS Pilani' },
+      ]),
+      () => apiClient.get('/colleges/public').then((r) => r.data),
+    ),
   getProfile: () =>
     withMock(
       () => mockDataService.college.getProfile(),

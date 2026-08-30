@@ -22,6 +22,7 @@ import com.skillbridge.student.repository.ProjectRepository;
 import com.skillbridge.student.repository.StudentProfileRepository;
 import com.skillbridge.student.repository.StudentSkillRepository;
 import com.skillbridge.user.entity.Role;
+import com.skillbridge.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -68,6 +69,9 @@ class StudentServiceTest {
     private CollegeRepository collegeRepository;
 
     @Mock
+    private UserRepository userRepository;
+
+    @Mock
     private FileStorageService fileStorageService;
 
     private StudentService studentService;
@@ -85,6 +89,7 @@ class StudentServiceTest {
                 skillRepository,
                 departmentRepository,
                 collegeRepository,
+                userRepository,
                 fileStorageService
         );
 

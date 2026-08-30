@@ -125,6 +125,14 @@ public class CollegeServiceImpl implements CollegeService {
                 .collect(Collectors.toList());
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<CollegeProfileDto> listPublicColleges() {
+        return collegeRepository.findAllByOrderByNameAsc().stream()
+                .map(CollegeProfileDto::from)
+                .collect(Collectors.toList());
+    }
+
     private Long resolveEffectiveCollegeId(Long collegeIdOverride, CustomUserDetails currentUser) {
         if (currentUser.getRole() == Role.ADMIN) {
             if (collegeIdOverride != null) {

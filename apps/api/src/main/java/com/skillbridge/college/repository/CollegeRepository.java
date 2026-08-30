@@ -14,4 +14,8 @@ public interface CollegeRepository extends JpaRepository<College, Long> {
     boolean existsByUserId(Long userId);
 
     List<College> findByVerificationStatus(VerificationStatus status);
+
+    Optional<College> findByNameIgnoreCase(String name);
+
+    List<College> findAllByOrderByNameAsc();
 }

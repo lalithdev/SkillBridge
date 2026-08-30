@@ -61,6 +61,9 @@ public class StudentProfile {
     @Column(name = "github_url", length = 500)
     private String githubUrl;
 
+    @Column(name = "phone", length = 30)
+    private String phone;
+
     @Column(name = "resume_path", length = 1000)
     private String resumePath;
 

@@ -94,12 +94,28 @@ public class AuthServiceImpl implements AuthService {
                 String firstName = nameParts[0];
                 String lastName = nameParts.length > 1 ? nameParts[1] : "";
 
+                Short yearOfStudy = null;
+                if (request.getYearOfStudy() != null) {
+                    yearOfStudy = request.getYearOfStudy().shortValue();
+                } else if (request.getGraduationYear() != null) {
+                    int currentYear = java.time.Year.now().getValue();
+                    int diff = request.getGraduationYear() - currentYear;
+                    int calculated = 4 - diff;
+                    yearOfStudy = (short) Math.max(1, Math.min(8, calculated > 0 ? calculated : 4));
+                }
+
+                String phone = (request.getPhone() != null && !request.getPhone().trim().isEmpty())
+                        ? request.getPhone().trim()
+                        : null;
+
                 StudentProfile studentProfile = StudentProfile.builder()
                         .userId(user.getId())
                         .collegeId(request.getCollegeId())
                         .departmentId(request.getDepartmentId())
                         .firstName(firstName)
                         .lastName(lastName)
+                        .phone(phone)
+                        .yearOfStudy(yearOfStudy)
                         .build();
 
                 studentProfile = studentProfileRepository.save(studentProfile);

@@ -44,7 +44,10 @@ export const mockDataService = {
   },
   student: {
     getProfile: () => mockDelay(studentProfile),
+    updateProfile: (payload) => mockDelay({ ...studentProfile, ...payload }),
     getSkills: () => mockDelay(studentSkills),
+    addSkill: (payload) => mockDelay({ id: payload.skillId || 999, name: 'Skill', level: 75, category: 'Technical' }),
+    removeSkill: () => mockDelay(null),
     getSkillGaps: () => mockDelay(skillGapAnalysis),
     getApplications: () => mockDelay(studentApplications),
     getInternships: () => mockDelay(studentInternships),

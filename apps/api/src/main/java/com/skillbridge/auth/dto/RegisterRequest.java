@@ -42,4 +42,16 @@ public class RegisterRequest {
     @JsonProperty("departmentId")
     @JsonAlias("department_id")
     private Long departmentId;
+
+    @JsonProperty("phone")
+    @JsonAlias({"phone_number", "phoneNumber"})
+    private String phone;
+
+    @JsonProperty("graduationYear")
+    @JsonAlias("graduation_year")
+    private Integer graduationYear;
+
+    @JsonProperty("yearOfStudy")
+    @JsonAlias({"year_of_study", "year"})
+    private Integer yearOfStudy;
 }

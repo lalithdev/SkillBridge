@@ -29,4 +29,6 @@ public interface CollegeService {
             Long collegeIdOverride,
             CustomUserDetails currentUser
     );
+
+    List<CollegeProfileDto> listPublicColleges();
 }

@@ -17,6 +17,8 @@ public class StudentProfileResponse {
 
     private Long id;
     private Long userId;
+    private String email;
+    private String phone;
     private Long collegeId;
     private String collegeName;
     private String firstName;
@@ -25,6 +27,7 @@ public class StudentProfileResponse {
     private String departmentName;
     private String departmentCode;
     private Integer yearOfStudy;
+    private Integer graduationYear;
     private BigDecimal cgpa;
     private String careerInterests;
     private String portfolioUrl;

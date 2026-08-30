@@ -1,0 +1,15 @@
+target/
+.mvn/
+mvnw
+mvnw.cmd
+.git/
+.gitignore
+.env
+*.iml
+.idea/
+.vscode/
+.settings/
+.classpath
+.project
+.factorypath
+uploads/

@@ -93,8 +93,22 @@ export function AuthProvider({ children }) {
           ? (profile.college || profile.collegeName || profile.name)
           : profile.name,
     };
+    if (profile.phone) {
+      payload.phone = profile.phone;
+    }
     if (backendRole === 'STUDENT') {
-      payload.collegeId = profile.collegeId ? Number(profile.collegeId) : 1;
+      if (profile.collegeId) {
+        payload.collegeId = Number(profile.collegeId);
+      }
+      if (profile.departmentId) {
+        payload.departmentId = Number(profile.departmentId);
+      }
+      if (profile.graduationYear) {
+        payload.graduationYear = Number(profile.graduationYear);
+      }
+      if (profile.yearOfStudy) {
+        payload.yearOfStudy = Number(profile.yearOfStudy);
+      }
     }
     const authResponse = await authApi.register(payload);
     return establishSession(authResponse);

@@ -22,6 +22,8 @@ import com.skillbridge.student.repository.ProjectRepository;
 import com.skillbridge.student.repository.StudentProfileRepository;
 import com.skillbridge.student.repository.StudentSkillRepository;
 import com.skillbridge.user.entity.Role;
+import com.skillbridge.user.entity.User;
+import com.skillbridge.user.repository.UserRepository;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
@@ -44,6 +46,7 @@ public class StudentServiceImpl implements StudentService {
     private final SkillRepository skillRepository;
     private final DepartmentRepository departmentRepository;
     private final CollegeRepository collegeRepository;
+    private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
 
     public StudentServiceImpl(
@@ -54,6 +57,7 @@ public class StudentServiceImpl implements StudentService {
             SkillRepository skillRepository,
             DepartmentRepository departmentRepository,
             CollegeRepository collegeRepository,
+            UserRepository userRepository,
             FileStorageService fileStorageService) {
         this.studentProfileRepository = studentProfileRepository;
         this.studentSkillRepository = studentSkillRepository;
@@ -62,6 +66,7 @@ public class StudentServiceImpl implements StudentService {
         this.skillRepository = skillRepository;
         this.departmentRepository = departmentRepository;
         this.collegeRepository = collegeRepository;
+        this.userRepository = userRepository;
         this.fileStorageService = fileStorageService;
     }
 
@@ -85,22 +90,64 @@ public class StudentServiceImpl implements StudentService {
     public StudentProfileResponse updateStudentProfile(CustomUserDetails user, UpdateStudentProfileRequest request) {
         StudentProfile profile = getStudentProfileFromUser(user);
 
+        if (request.getCollegeId() != null) {
+            if (!collegeRepository.existsById(request.getCollegeId())) {
+                throw new ResourceNotFoundException("College not found with id: " + request.getCollegeId());
+            }
+            profile.setCollegeId(request.getCollegeId());
+        }
+
         if (request.getDepartmentId() != null) {
             if (!departmentRepository.existsById(request.getDepartmentId())) {
                 throw new ResourceNotFoundException("Department not found with id: " + request.getDepartmentId());
             }
             profile.setDepartmentId(request.getDepartmentId());
-        } else {
-            profile.setDepartmentId(null);
         }
 
-        profile.setFirstName(request.getFirstName().trim());
-        profile.setLastName(request.getLastName().trim());
-        profile.setYearOfStudy(request.getYearOfStudy() != null ? request.getYearOfStudy().shortValue() : null);
-        profile.setCgpa(request.getCgpa());
-        profile.setCareerInterests(request.getCareerInterests());
-        profile.setPortfolioUrl(request.getPortfolioUrl());
-        profile.setGithubUrl(request.getGithubUrl());
+        if (request.getName() != null && !request.getName().trim().isEmpty()
+                && (request.getFirstName() == null || request.getFirstName().trim().isEmpty())) {
+            String[] parts = request.getName().trim().split("\\s+", 2);
+            profile.setFirstName(parts[0]);
+            profile.setLastName(parts.length > 1 ? parts[1] : "");
+        } else {
+            if (request.getFirstName() != null && !request.getFirstName().trim().isEmpty()) {
+                profile.setFirstName(request.getFirstName().trim());
+            }
+            if (request.getLastName() != null) {
+                profile.setLastName(request.getLastName().trim());
+            }
+        }
+
+        if (request.getPhone() != null) {
+            profile.setPhone(request.getPhone().trim());
+        }
+
+        if (request.getYearOfStudy() != null) {
+            profile.setYearOfStudy(request.getYearOfStudy().shortValue());
+        } else if (request.getGraduationYear() != null) {
+            int currentYear = java.time.Year.now().getValue();
+            int diff = request.getGraduationYear() - currentYear;
+            int calculated = 4 - diff;
+            profile.setYearOfStudy((short) Math.max(1, Math.min(8, calculated > 0 ? calculated : 4)));
+        }
+
+        if (request.getCgpa() != null) {
+            profile.setCgpa(request.getCgpa());
+        }
+
+        if (request.getCareerInterests() != null) {
+            profile.setCareerInterests(request.getCareerInterests());
+        } else if (request.getBio() != null) {
+            profile.setCareerInterests(request.getBio());
+        }
+
+        if (request.getPortfolioUrl() != null) {
+            profile.setPortfolioUrl(request.getPortfolioUrl());
+        }
+
+        if (request.getGithubUrl() != null) {
+            profile.setGithubUrl(request.getGithubUrl());
+        }
 
         StudentProfile updated = studentProfileRepository.save(profile);
         return buildFullProfileResponse(updated);
@@ -429,9 +476,22 @@ public class StudentServiceImpl implements StudentService {
 
         boolean hasResume = (profile.getResumePath() != null && !profile.getResumePath().trim().isEmpty());
 
+        String email = null;
+        if (profile.getUserId() != null) {
+            email = userRepository.findById(profile.getUserId())
+                    .map(User::getEmail)
+                    .orElse(null);
+        }
+
+        Integer graduationYear = profile.getYearOfStudy() != null
+                ? Integer.valueOf(java.time.Year.now().getValue() + (4 - profile.getYearOfStudy().intValue()))
+                : null;
+
         return StudentProfileResponse.builder()
                 .id(profile.getId())
                 .userId(profile.getUserId())
+                .email(email)
+                .phone(profile.getPhone())
                 .collegeId(profile.getCollegeId())
                 .collegeName(collegeName)
                 .firstName(profile.getFirstName())
@@ -440,6 +500,7 @@ public class StudentServiceImpl implements StudentService {
                 .departmentName(departmentName)
                 .departmentCode(departmentCode)
                 .yearOfStudy(profile.getYearOfStudy() != null ? profile.getYearOfStudy().intValue() : null)
+                .graduationYear(graduationYear)
                 .cgpa(profile.getCgpa())
                 .careerInterests(profile.getCareerInterests())
                 .portfolioUrl(profile.getPortfolioUrl())

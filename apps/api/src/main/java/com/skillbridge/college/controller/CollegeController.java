@@ -26,6 +26,16 @@ public class CollegeController {
     }
 
     /**
+     * GET /api/v1/colleges/public
+     * List all registered colleges publicly for student selection.
+     */
+    @GetMapping("/public")
+    public ResponseEntity<List<CollegeProfileDto>> listPublicColleges() {
+        List<CollegeProfileDto> colleges = collegeService.listPublicColleges();
+        return ResponseEntity.ok(colleges);
+    }
+
+    /**
      * GET /api/v1/colleges/profile
      * Get profile for authenticated college.
      */
