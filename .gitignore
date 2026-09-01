@@ -22,3 +22,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Sensitive Demo Credentials & Seed Data
+docs/database/demo-credentials.md
+apps/api/src/main/resources/db/seed/
