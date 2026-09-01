@@ -149,7 +149,11 @@ const stats = [
   { key: 'skills', label: 'Skills Tracked', icon: Award, color: 'var(--primary-700)' },
 ];
 
-const formatStat = (n) => n.toLocaleString('en-US');
+const formatStat = (n) => {
+  if (n === null || n === undefined) return '0';
+  const num = Number(n);
+  return isNaN(num) ? String(n) : num.toLocaleString('en-US');
+};
 
 /* ---------- mock dashboard preview data ---------- */
 
@@ -172,7 +176,12 @@ const previewMiniStats = [
 export default function Landing() {
   const navigate = useNavigate();
   const { data: platformStats } = usePlatformStats();
-  const statsData = platformStats || { students: 0, companies: 0, opportunities: 0, skills: 0 };
+  const statsData = {
+    students: platformStats?.students ?? platformStats?.totalStudents ?? 0,
+    companies: platformStats?.companies ?? platformStats?.totalCompanies ?? 0,
+    opportunities: platformStats?.opportunities ?? platformStats?.totalOpportunities ?? 0,
+    skills: platformStats?.skills ?? platformStats?.totalSkillsMapped ?? 0,
+  };
 
   return (
     <>
@@ -302,13 +311,13 @@ export default function Landing() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
                   <Building2 size={18} style={{ color: 'var(--secondary-600)' }} />
                   <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                    {statsData.companies}+ companies
+                    {formatStat(statsData.companies)}+ companies
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
                   <Award size={18} style={{ color: 'var(--accent-600)' }} />
                   <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                    {statsData.skills} skills tracked
+                    {formatStat(statsData.skills)} skills tracked
                   </span>
                 </div>
               </div>

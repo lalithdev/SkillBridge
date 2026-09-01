@@ -546,6 +546,10 @@ export const platformApi = {
             const skillsList = skillsRes.value?.data || [];
             const oppsList = oppsRes.value?.data?.content || oppsRes.value?.data || [];
             return {
+              students: 150,
+              companies: 40,
+              opportunities: oppsList.length || 10,
+              skills: skillsList.length || 20,
               totalStudents: 150,
               totalColleges: 25,
               totalCompanies: 40,
